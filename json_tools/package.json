@@ -1,0 +1,11 @@
+{
+  "name": "dk-datadive20171111-pauli-nodeapp",
+  "version": "0.0.1",
+  "dependencies": {
+    "node-getopt": "^0.2.3",
+    "tedious": "^2.1.1"
+  },
+  "engines": {
+    "node": ">=6.0"
+  }
+}
