@@ -5,7 +5,7 @@ server = "datakind.opensecrets.org"
 database = "fcc"
 tablename = "dk_data_documents"
 username = "datakind"
-password = "dkdkdk123"
+password = ""
 driver= "{ODBC Driver 13 for SQL Server}"
 cnxn = pyodbc.connect(
     'DRIVER='+driver+';PORT=1433;SERVER='+server+';'
