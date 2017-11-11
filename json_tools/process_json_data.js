@@ -49,11 +49,28 @@ function findMoney(row) {
   if (displayRange.end >= 0 && rowCount > displayRange.end) 
     process.exit(0);
   
-  if ( !row.invoice_in_name && !row.invoice_in_content)
+  if ( !row.invoice_in_name && !row.invoice_in_content) {
     return;
+  }
   
   let content = row.content;
-  console.log("row %d, content: ", rowCount, content);
+  
+  var re = /\$(\d+(,\d+)*)/g;
+  var matches = content.match(re);
+  if (matches) {
+    matches.sort(function(strA, strB) {
+      // remove commas inside numbers
+      strA = strA.split(',').join('');
+      strB = strB.split(',').join('');
+      
+      var numA = parseInt(strA.substr(1), 10);
+      var numB = parseInt(strB.substr(1), 10);
+      if (numA < numB) return -1;
+      if (numA > numB) return 1;
+      return 0;
+    });
+    console.log("row %d -- highest dollar amount match: %s    (PDF url: %s)", rowCount, matches[matches.length - 1], row.url);
+  }
 }
 
 
@@ -133,7 +150,7 @@ while (totalRead < fsize) {
         processFunc(row);
       } catch (e) {
         //console.log("** couldn't parse: ", lastLine);
-        console.log("** error at row %d", numRows);
+        console.log("** error at row %d: ", numRows, e);
         process.exit(1);
       }      
     }
