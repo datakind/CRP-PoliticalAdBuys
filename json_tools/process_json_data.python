@@ -1,0 +1,68 @@
+import sys, argparse, io, json
+
+
+numRows = 0
+
+
+# --- processing function called for each row ---
+
+def processRow(row):
+    # example: print the station ID from the data.
+    print "row {}, station id: {}".format(numRows, row["station_id"])
+
+
+
+# --- main loop: loads the input file stream and splits into rows ---
+
+parser = argparse.ArgumentParser(description='Process JSON data.')
+
+parser.add_argument('--file', 
+                    help='input file')
+
+args = parser.parse_args()
+
+if not args.file:
+    print "No input file."
+    sys.exit(1)
+    
+#print "Input file is: {}".format(args.file)
+bufSize = 64*1024
+fs = io.BufferedReader(io.FileIO(args.file), buffer_size=bufSize)
+
+totalRead = 0
+lineBuf = b''
+iters = 0
+
+while True:
+    buf = fs.read(bufSize)
+    if not buf:
+        break
+        
+    numRead = len(buf)
+    
+    idx = 0
+    while True:
+        nextIdx = buf.find('\n', idx)
+        if nextIdx == -1:
+            break
+            
+        lineBuf += buf[idx:nextIdx]
+        idx = nextIdx + 1        
+        numRows += 1
+        
+        row = json.loads(lineBuf)
+        processRow(row)
+        
+        lineBuf = b''
+    
+    lineBuf += buf[idx:]
+
+    totalRead += numRead
+    iters += 1
+    
+    
+#print "done, total {}, iters {}, rows {}".format(totalRead, iters, numRows)
+
+
+
+    
