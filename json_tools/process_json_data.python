@@ -1,22 +1,116 @@
-import sys, argparse, io, json
+import sys, argparse, io, json, re
 
 
+# these determine how much of the data we process
+firstRow = 0
+lastRow = -1
+
+# running counter when the stream is being read
 numRows = 0
+
+
+outputFile = open("output.json", "w")
+    
 
 
 # --- processing function called for each row ---
 
-def processRow(row):
-    # example: print the station ID from the data.
-    print "row {}, station id: {}".format(numRows, row["station_id"])
+lastAmount = -1
+amountsByStationId = {}
 
+# Regex approach
+def convertDollarStringToNumber(string):
+	firstPart = string[:-3]
+	firstPart = firstPart.replace("'", '')
+	firstPart = firstPart.replace(' ', '')
+	firstPart = firstPart.replace('$', '')
+	firstPart = firstPart.replace(',', '')
+	firstPart = firstPart.replace('.', '')
+	secondPart = string[-2:]
+	secondPart = secondPart.replace('o', '0')
+	toReturn = '.'.join([firstPart, secondPart])
+	return float(toReturn)
+
+
+def getDollars(text, useDollarSign):
+    # matches $, then between 1 and 3 digits, then a separator (, . or ') followed by 3 digits, repeated any number of times, then cents
+    # this casework is to counteract the instances when $ gets read as 5
+	if useDollarSign:
+		pattern = '\$[ ]*\d{1,3}(?:[,\.\']?\d{3})*[,\.\'][\do]{2}'
+	else:
+		pattern = '[ ]*\d{1,3}(?:[,\.\']?\d{3})*[,\.\'][\do]{2}'
+# 	if useDollarSign:
+# 		pattern = '\$[ ]*\d{1,3}(?:[^\d\s]?\d{3})*[^\d\s][\do]{2}'
+# 	else:
+# 		pattern = '[ ]*\d{1,3}(?:[^\d\s]?\d{3})*[^\d\s][\do]{2}'
+	return re.findall(pattern, text)
+
+# does not handle discounts
+# does not handle documents that contain mulitple invoices
+def predict_amount(content):
+    #print "predict..."
+    rawDollars = getDollars(content, '$' in content)
+    #print "...done with regex"
+    try:
+        return max([convertDollarStringToNumber(number) for number in rawDollars])
+    except:
+        return None
+
+
+def processRow(row):
+    global lastAmount, amountsByStationId
+    
+    if numRows < firstRow:
+        return
+    if lastRow >= 0 and numRows > lastRow:
+        afterProcessing()
+        sys.exit(0)
+    
+    if row['content']:
+        content = row['content']
+        maxLen = 30000
+        #print "processing row {}, content len: {}...".format(numRows, len(content))
+        if len(content) > maxLen:
+            print "trimming content at row {}".format(numRows)
+            content = content[:maxLen]
+            
+        amount = predict_amount(content)
+        #print "   .. done"
+        if amount > 0 and amount != lastAmount:
+            print "row {} - amount {} - url {}".format(numRows, amount, row['url'])
+            lastAmount = amount
+            
+            stationId = row['station_id']
+            if stationId in amountsByStationId:
+                amountsForStation = amountsByStationId[stationId]
+            else:
+                print "initializing station id {}".format(stationId)
+                amountsForStation = []
+                amountsByStationId[stationId] = amountsForStation
+                
+            amountsForStation.append({'amount': amount, 'row': numRows, 'url': row['url']})
+    
+    # example: print the station ID from the data.
+    #print "row {}, station id: {}".format(numRows, row["station_id"])
+    #if re.search("republican", row['content'], re.IGNORECASE):
+    #    print "row {}: found republican! {}".format(numRows, row)
+
+def afterProcessing():
+    global amountsByStationId
+    
+    print "\n------------ finished -------------\n"
+    
+    for k, v in amountsByStationId.items():
+        obj = { 'stationId': k, 'amounts': v }
+        outputFile.write(json.dumps(obj))
+        outputFile.write('\n')
 
 
 # --- main loop: loads the input file stream and splits into rows ---
 
 parser = argparse.ArgumentParser(description='Process JSON data.')
 
-parser.add_argument('--file', 
+parser.add_argument('--file',
                     help='input file')
 
 args = parser.parse_args()
@@ -24,7 +118,7 @@ args = parser.parse_args()
 if not args.file:
     print "No input file."
     sys.exit(1)
-    
+
 #print "Input file is: {}".format(args.file)
 bufSize = 64*1024
 fs = io.BufferedReader(io.FileIO(args.file), buffer_size=bufSize)
@@ -37,7 +131,7 @@ while True:
     buf = fs.read(bufSize)
     if not buf:
         break
-        
+    
     numRead = len(buf)
     
     idx = 0
@@ -45,9 +139,9 @@ while True:
         nextIdx = buf.find('\n', idx)
         if nextIdx == -1:
             break
-            
+        
         lineBuf += buf[idx:nextIdx]
-        idx = nextIdx + 1        
+        idx = nextIdx + 1
         numRows += 1
         
         row = json.loads(lineBuf)
@@ -56,13 +150,14 @@ while True:
         lineBuf = b''
     
     lineBuf += buf[idx:]
-
+    
     totalRead += numRead
     iters += 1
     
-    
+
 #print "done, total {}, iters {}, rows {}".format(totalRead, iters, numRows)
 
+afterProcessing()
 
-
+    
     
